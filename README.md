@@ -1,20 +1,20 @@
 ## usb-i2c-adapter
 
----
-
-### Description
+#### Description
 
 The goal is to create a simple USB to I2C bridge. It must be able to operate as I2C master device in both transmitter and receiver modes. Optionally it must provide interface to additional features or configuration. Adapter must be able to use on PC, router, RPi or any other device with USB host.
 
 ---
 
-### Hardware design
+#### Hardware design
 
 Hardware is based on ready modules: usb-uart bridge and microcontroller development board.
 
+![HW scheme](doc/usb-i2c-adapter-hw-scheme.png)
+
 ---
 
-### Communication protocol
+#### Communication protocol
 
 All actions are based on transmitting a command followed by required number of argumens. Every request is followed by success or failure response.
 
@@ -48,7 +48,7 @@ Response is unified. First byte is a prefix with number of following bytes. `00h
 
 ---
 
-### Software design
+#### Software design
 
 Adapter code is realized as a state machine. It is a loop of four states: initialization, command receipt, command execution and response with execution result.
 
