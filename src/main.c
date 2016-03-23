@@ -1,4 +1,4 @@
-// usb-i2c-adapter / 08-Mar-2016 / grytole@gmail.com
+// usb-i2c-adapter / 23-Mar-2016 / grytole@gmail.com
 
 // Write byte to I2C device (command ID = 00h):
 //  TX:         00h, address, register, numbytes, byte1, [..., byteN]
@@ -15,13 +15,21 @@
 //  RX SUCCESS: numbytes, address1, [..., addressN]
 //  RX FAILURE: 00h
 
+// Echo payload (command ID = 03h):
+//  TX:         03h, numbytes, [byte1, ..., byteN]
+//  RX:         numbytes, [byte1, ..., byteN]
+
 #include "stm8s.h"
 
+//#define DEFAULT_UART_BAUDRATE (9600)
 #define DEFAULT_UART_BAUDRATE (115200)
+//#define DEFAULT_I2C_BITRATE (I2C_MAX_STANDARD_FREQ)
+#define DEFAULT_I2C_BITRATE (I2C_MAX_FAST_FREQ)
 #define MAX_PAYLOAD_SIZE (255)
 #define MIN_DETECT_ADDRESS (0x03)
 #define MAX_DETECT_ADDRESS (0x77)
 #define RESPOND_FAILURE (0x00)
+#define TIMEOUT_1MS (16000)
 
 enum {
     STATE_STARTUP = 0,
@@ -33,7 +41,8 @@ enum {
 enum {
     COMMAND_WRITE = 0,
     COMMAND_READ,
-    COMMAND_DETECT
+    COMMAND_DETECT,
+    COMMAND_ECHO
 };
 
 static struct {
@@ -47,6 +56,8 @@ static struct {
     .state = STATE_STARTUP
 };
 
+static uint16_t timeout = 0;
+
 static void adapterInit( void )
 {
     CLK_HSIPrescalerConfig( CLK_PRESCALER_HSIDIV1 );
@@ -58,7 +69,7 @@ static void adapterInit( void )
                 UART1_SYNCMODE_CLOCK_DISABLE,
                 UART1_MODE_TXRX_ENABLE );
     I2C_DeInit();
-    I2C_Init( I2C_MAX_STANDARD_FREQ,
+    I2C_Init( DEFAULT_I2C_BITRATE,
               0x0000,
               I2C_DUTYCYCLE_2,
               I2C_ACK_CURR,
@@ -74,32 +85,125 @@ static void adapterReceive( void )
     switch( adapter.command )
     {
     case COMMAND_WRITE:
-        while( RESET == UART1_GetFlagStatus( UART1_FLAG_RXNE ) );
+        timeout = TIMEOUT_1MS;
+        while( ( RESET == UART1_GetFlagStatus( UART1_FLAG_RXNE ) ) && (--timeout) );
+        if( 0 == timeout )
+        {
+            adapter.payloadSize = RESPOND_FAILURE;
+            adapter.state = STATE_RESPOND;
+            break;
+        }
         adapter.deviceAddress = UART1_ReceiveData8();
-        while( RESET == UART1_GetFlagStatus( UART1_FLAG_RXNE ) );
+
+        timeout = TIMEOUT_1MS;
+        while( ( RESET == UART1_GetFlagStatus( UART1_FLAG_RXNE ) ) && (--timeout) );
+        if( 0 == timeout )
+        {
+            adapter.payloadSize = RESPOND_FAILURE;
+            adapter.state = STATE_RESPOND;
+            break;
+        }
         adapter.deviceRegister = UART1_ReceiveData8();
-        while( RESET == UART1_GetFlagStatus( UART1_FLAG_RXNE ) );
+
+        timeout = TIMEOUT_1MS;
+        while( ( RESET == UART1_GetFlagStatus( UART1_FLAG_RXNE ) ) && (--timeout) );
+        if( 0 == timeout )
+        {
+            adapter.payloadSize = RESPOND_FAILURE;
+            adapter.state = STATE_RESPOND;
+            break;
+        }
         adapter.payloadSize = UART1_ReceiveData8();
+
         for( uint8_t i = 0; i < adapter.payloadSize; i++ )
         {
-            while( RESET == UART1_GetFlagStatus( UART1_FLAG_RXNE ) );
+            timeout = TIMEOUT_1MS;
+            while( ( RESET == UART1_GetFlagStatus( UART1_FLAG_RXNE ) ) && (--timeout) );
+            if( 0 == timeout )
+            {
+                adapter.payloadSize = RESPOND_FAILURE;
+                adapter.state = STATE_RESPOND;
+                break;
+            }
             adapter.payload[ i ] = UART1_ReceiveData8();
         }
         break;
     case COMMAND_READ:
-        while( RESET == UART1_GetFlagStatus( UART1_FLAG_RXNE ) );
+        timeout = TIMEOUT_1MS;
+        while( ( RESET == UART1_GetFlagStatus( UART1_FLAG_RXNE ) ) && (--timeout) );
+        if( 0 == timeout )
+        {
+            adapter.payloadSize = RESPOND_FAILURE;
+            adapter.state = STATE_RESPOND;
+            break;
+        }
         adapter.deviceAddress = UART1_ReceiveData8();
-        while( RESET == UART1_GetFlagStatus( UART1_FLAG_RXNE ) );
+
+        timeout = TIMEOUT_1MS;
+        while( ( RESET == UART1_GetFlagStatus( UART1_FLAG_RXNE ) ) && (--timeout) );
+        if( 0 == timeout )
+        {
+            adapter.payloadSize = RESPOND_FAILURE;
+            adapter.state = STATE_RESPOND;
+            break;
+        }
         adapter.deviceRegister = UART1_ReceiveData8();
-        while( RESET == UART1_GetFlagStatus( UART1_FLAG_RXNE ) );
+
+        timeout = TIMEOUT_1MS;
+        while( ( RESET == UART1_GetFlagStatus( UART1_FLAG_RXNE ) ) && (--timeout) );
+        if( 0 == timeout )
+        {
+            adapter.payloadSize = RESPOND_FAILURE;
+            adapter.state = STATE_RESPOND;
+            break;
+        }
         adapter.payloadSize = UART1_ReceiveData8();
         break;
     case COMMAND_DETECT:
-        while( RESET == UART1_GetFlagStatus( UART1_FLAG_RXNE ) );
+        timeout = TIMEOUT_1MS;
+        while( ( RESET == UART1_GetFlagStatus( UART1_FLAG_RXNE ) ) && (--timeout) );
+        if( 0 == timeout )
+        {
+            adapter.payloadSize = RESPOND_FAILURE;
+            adapter.state = STATE_RESPOND;
+            break;
+        }
         adapter.payloadSize = UART1_ReceiveData8();
+
         for( uint8_t i = 0; i < adapter.payloadSize; i++ )
         {
-            while( RESET == UART1_GetFlagStatus( UART1_FLAG_RXNE ) );
+            timeout = TIMEOUT_1MS;
+            while( ( RESET == UART1_GetFlagStatus( UART1_FLAG_RXNE ) ) && (--timeout) );
+            if( 0 == timeout )
+            {
+                adapter.payloadSize = RESPOND_FAILURE;
+                adapter.state = STATE_RESPOND;
+                break;
+            }
+            adapter.payload[ i ] = UART1_ReceiveData8();
+        }
+        break;
+    case COMMAND_ECHO:
+        timeout = TIMEOUT_1MS;
+        while( ( RESET == UART1_GetFlagStatus( UART1_FLAG_RXNE ) ) && (--timeout) );
+        if( 0 == timeout )
+        {
+            adapter.payloadSize = RESPOND_FAILURE;
+            adapter.state = STATE_RESPOND;
+            break;
+        }
+        adapter.payloadSize = UART1_ReceiveData8();
+
+        for( uint8_t i = 0; i < adapter.payloadSize; i++ )
+        {
+            timeout = TIMEOUT_1MS;
+            while( ( RESET == UART1_GetFlagStatus( UART1_FLAG_RXNE ) ) && (--timeout) );
+            if( 0 == timeout )
+            {
+                adapter.payloadSize = RESPOND_FAILURE;
+                adapter.state = STATE_RESPOND;
+                break;
+            }
             adapter.payload[ i ] = UART1_ReceiveData8();
         }
         break;
@@ -114,25 +218,64 @@ static void adapterExecute( void )
     switch( adapter.command )
     {
     case COMMAND_WRITE:
-        while( RESET != I2C_GetFlagStatus( I2C_FLAG_BUSBUSY ) );
+        timeout = TIMEOUT_1MS;
+        while( ( RESET != I2C_GetFlagStatus( I2C_FLAG_BUSBUSY ) ) && (--timeout) );
+        if( 0 == timeout )
+        {
+            adapter.payloadSize = RESPOND_FAILURE;
+            adapter.state = STATE_RESPOND;
+            break;
+        }
         I2C_GenerateSTART( ENABLE );
-        while( SUCCESS != I2C_CheckEvent( I2C_EVENT_MASTER_MODE_SELECT ) );
+
+        timeout = TIMEOUT_1MS;
+        while( ( SUCCESS != I2C_CheckEvent( I2C_EVENT_MASTER_MODE_SELECT ) ) && (--timeout) );
+        if( 0 == timeout )
+        {
+            adapter.payloadSize = RESPOND_FAILURE;
+            adapter.state = STATE_RESPOND;
+            I2C_GenerateSTOP( ENABLE );
+            break;
+        }
         I2C_Send7bitAddress( adapter.deviceAddress << 1, I2C_DIRECTION_TX );
+
+        timeout = TIMEOUT_1MS;
         while( ( SUCCESS != I2C_CheckEvent( I2C_EVENT_MASTER_TRANSMITTER_MODE_SELECTED ) ) &&
-               ( RESET == I2C_GetFlagStatus( I2C_FLAG_ACKNOWLEDGEFAILURE ) ) );
+               ( RESET == I2C_GetFlagStatus( I2C_FLAG_ACKNOWLEDGEFAILURE ) ) &&
+               ( --timeout ) );
         if( RESET == I2C_GetFlagStatus( I2C_FLAG_ACKNOWLEDGEFAILURE ) )
         {
             I2C_SendData( adapter.deviceRegister );
-            while( SUCCESS != I2C_CheckEvent( I2C_EVENT_MASTER_BYTE_TRANSMITTING ) );
+
+            timeout = TIMEOUT_1MS;
+            while( ( SUCCESS != I2C_CheckEvent( I2C_EVENT_MASTER_BYTE_TRANSMITTING ) ) && (--timeout) );
+            if( 0 == timeout )
+            {
+                adapter.payloadSize = RESPOND_FAILURE;
+                adapter.state = STATE_RESPOND;
+                I2C_GenerateSTOP( ENABLE );
+                break;
+            }
             for( uint8_t i = 0; i < adapter.payloadSize; i++ )
             {
                 I2C_SendData( adapter.payload[ i ] );
-                while( SUCCESS != I2C_CheckEvent( I2C_EVENT_MASTER_BYTE_TRANSMITTING ) );
+
+                timeout = TIMEOUT_1MS;
+                while( ( SUCCESS != I2C_CheckEvent( I2C_EVENT_MASTER_BYTE_TRANSMITTING ) ) && (--timeout) );
+                if( 0 == timeout )
+                {
+                    adapter.payloadSize = RESPOND_FAILURE;
+                    adapter.state = STATE_RESPOND;
+                    I2C_GenerateSTOP( ENABLE );
+                    break;
+                }
                 if( ( adapter.payloadSize - 1 ) == i )
                 {
                     I2C_GenerateSTOP( ENABLE );
                 }
             }
+            adapter.payload[ 0 ] = adapter.payloadSize;
+            adapter.payloadSize = 1;
         }
         else
         {
@@ -142,28 +285,55 @@ static void adapterExecute( void )
         }
         break;
     case COMMAND_READ:
-        while( RESET != I2C_GetFlagStatus( I2C_FLAG_BUSBUSY ) );
+        timeout = TIMEOUT_1MS;
+        while( ( RESET != I2C_GetFlagStatus( I2C_FLAG_BUSBUSY ) ) && (--timeout) );
+        if( 0 == timeout )
+        {
+            adapter.payloadSize = RESPOND_FAILURE;
+            adapter.state = STATE_RESPOND;
+            break;
+        }
         I2C_GenerateSTART( ENABLE );
-        while( SUCCESS != I2C_CheckEvent( I2C_EVENT_MASTER_MODE_SELECT ) );
+
+        timeout = TIMEOUT_1MS;
+        while( ( SUCCESS != I2C_CheckEvent( I2C_EVENT_MASTER_MODE_SELECT ) ) && (--timeout) );
         I2C_Send7bitAddress( adapter.deviceAddress << 1, I2C_DIRECTION_TX );
+
+        timeout = TIMEOUT_1MS;
         while( ( SUCCESS != I2C_CheckEvent( I2C_EVENT_MASTER_TRANSMITTER_MODE_SELECTED ) ) &&
-               ( RESET == I2C_GetFlagStatus( I2C_FLAG_ACKNOWLEDGEFAILURE ) ) );
+               ( RESET == I2C_GetFlagStatus( I2C_FLAG_ACKNOWLEDGEFAILURE ) ) &&
+               (--timeout) );
         if( RESET == I2C_GetFlagStatus( I2C_FLAG_ACKNOWLEDGEFAILURE ) )
         {
             I2C_SendData( adapter.deviceRegister );
-            while( SUCCESS != I2C_CheckEvent( I2C_EVENT_MASTER_BYTE_TRANSMITTING ) );
+
+            timeout = TIMEOUT_1MS;
+            while( ( SUCCESS != I2C_CheckEvent( I2C_EVENT_MASTER_BYTE_TRANSMITTING ) ) && (--timeout) );
+            if( 0 == timeout )
+            {
+                adapter.payloadSize = RESPOND_FAILURE;
+                adapter.state = STATE_RESPOND;
+                break;
+            }
             I2C_GenerateSTART( ENABLE );
-            while( SUCCESS != I2C_CheckEvent( I2C_EVENT_MASTER_MODE_SELECT ) );
+
+            timeout = TIMEOUT_1MS;
+            while( ( SUCCESS != I2C_CheckEvent( I2C_EVENT_MASTER_MODE_SELECT ) ) && (--timeout) );
             I2C_Send7bitAddress( adapter.deviceAddress << 1, I2C_DIRECTION_RX );
-            while( SUCCESS != I2C_CheckEvent( I2C_EVENT_MASTER_RECEIVER_MODE_SELECTED ) );
+
+            timeout = TIMEOUT_1MS;
+            while( ( SUCCESS != I2C_CheckEvent( I2C_EVENT_MASTER_RECEIVER_MODE_SELECTED ) ) && (--timeout) );
             for( uint8_t i = 0; i < adapter.payloadSize; i++ )
             {
                 if( ( adapter.payloadSize - 1 ) == i )
                 {
                     I2C_AcknowledgeConfig( I2C_ACK_NONE );
                 }
-                while( SUCCESS != I2C_CheckEvent( I2C_EVENT_MASTER_BYTE_RECEIVED ) );
+
+                timeout = TIMEOUT_1MS;
+                while( ( SUCCESS != I2C_CheckEvent( I2C_EVENT_MASTER_BYTE_RECEIVED ) ) && (--timeout) );
                 adapter.payload[ i ] = I2C_ReceiveData();
+
                 if( ( adapter.payloadSize - 1 ) == i )
                 {
                     I2C_GenerateSTOP( ENABLE );
@@ -188,12 +358,39 @@ static void adapterExecute( void )
         }
         for( uint8_t i = 0, j = 0, cnt = adapter.payloadSize; i < cnt; i++, adapter.payloadSize = j )
         {
-            while( RESET != I2C_GetFlagStatus( I2C_FLAG_BUSBUSY ) );
+            timeout = TIMEOUT_1MS;
+            while( ( RESET != I2C_GetFlagStatus( I2C_FLAG_BUSBUSY ) ) && (--timeout) );
+            if( 0 == timeout )
+            {
+                adapter.payloadSize = RESPOND_FAILURE;
+                adapter.state = STATE_RESPOND;
+                break;
+            }
             I2C_GenerateSTART( ENABLE );
-            while( SUCCESS != I2C_CheckEvent( I2C_EVENT_MASTER_MODE_SELECT ) );
+
+            timeout = TIMEOUT_1MS;
+            while( (SUCCESS != I2C_CheckEvent( I2C_EVENT_MASTER_MODE_SELECT ) ) && (--timeout) );
+            if( 0 == timeout )
+            {
+                adapter.payloadSize = RESPOND_FAILURE;
+                adapter.state = STATE_RESPOND;
+                I2C_GenerateSTOP( ENABLE );
+                break;
+            }
             I2C_Send7bitAddress( adapter.payload[ i ] << 1, I2C_DIRECTION_TX );
+
+            timeout = TIMEOUT_1MS;
             while( ( SUCCESS != I2C_CheckEvent( I2C_EVENT_MASTER_TRANSMITTER_MODE_SELECTED ) ) &&
-                   ( RESET == I2C_GetFlagStatus( I2C_FLAG_ACKNOWLEDGEFAILURE ) ) );
+                   ( RESET == I2C_GetFlagStatus( I2C_FLAG_ACKNOWLEDGEFAILURE ) ) &&
+                   (--timeout) );
+            if( 0 == timeout )
+            {
+                adapter.payloadSize = RESPOND_FAILURE;
+                adapter.state = STATE_RESPOND;
+                I2C_GenerateSTOP( ENABLE );
+                break;
+            }
+
             if( RESET == I2C_GetFlagStatus( I2C_FLAG_ACKNOWLEDGEFAILURE ) )
             {
                 adapter.payload[ j++ ] = adapter.payload[ i ];
@@ -204,6 +401,8 @@ static void adapterExecute( void )
             }
             I2C_GenerateSTOP( ENABLE );
         }
+        break;
+    case COMMAND_ECHO:
         break;
     default:
         adapter.payloadSize = RESPOND_FAILURE;
