@@ -22,7 +22,7 @@ Response is unified. First byte is a prefix with number of following bytes. `00h
 
 ##### List of commands
 
- - **Write** - `00h, address, register, numbytes, byte1, [..., byteN]` -> `numbytes, [byte1, ..., byteN]`
+ - **Write** - `00h, address, register, numbytes, byte1, [..., byteN]` -> `01h, numbytes`
  
  - **Read** - `01h, address, register, numbytes` -> `numbytes, [byte1, ..., byteN]`
 
@@ -34,7 +34,7 @@ Response is unified. First byte is a prefix with number of following bytes. `00h
  
    TX: `00h 77h F4h 01h 2Eh` - request a sample of temperature value from BMP180 barometer
    
-   RX: `01h 2Eh` - success, request sent
+   RX: `01h 01h` - success, one byte written
    
  - write two bytes `F0h 0Fh` into register `64h` of device with address `60h`
  
